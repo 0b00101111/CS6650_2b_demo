@@ -1,67 +1,103 @@
 package main
 
 import (
-    "net/http"
+	"net/http"
+	"strconv"
+	"sync"
 
-    "github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin"
 )
 
-// album represents data about a record album.
-type album struct {
-    ID     string  `json:"id"`
-    Title  string  `json:"title"`
-    Artist string  `json:"artist"`
-    Price  float64 `json:"price"`
+// Product matches the OpenAPI schema exactly
+type Product struct {
+	ProductID    int    `json:"product_id" binding:"required,min=1"`
+	SKU          string `json:"sku" binding:"required,min=1,max=100"`
+	Manufacturer string `json:"manufacturer" binding:"required,min=1,max=200"`
+	CategoryID   int    `json:"category_id" binding:"required,min=1"`
+	Weight       int    `json:"weight" binding:"min=0"`
+	SomeOtherID  int    `json:"some_other_id" binding:"required,min=1"`
 }
 
-// albums slice to seed record album data.
-var albums = []album{
-    {ID: "1", Title: "Blue Train", Artist: "John Coltrane", Price: 56.99},
-    {ID: "2", Title: "Jeru", Artist: "Gerry Mulligan", Price: 17.99},
-    {ID: "3", Title: "Sarah Vaughan and Clifford Brown", Artist: "Sarah Vaughan", Price: 39.99},
+// Error response matches the OpenAPI Error schema
+type ErrorResponse struct {
+	Error   string `json:"error"`
+	Message string `json:"message"`
+	Details string `json:"details,omitempty"`
 }
+
+// In-memory storage using sync.Map for thread safety
+var (
+	products = make(map[int]Product)
+	mu       sync.RWMutex
+)
 
 func main() {
-    router := gin.Default()
-    router.GET("/albums", getAlbums)
-    router.GET("/albums/:id", getAlbumByID)
-    router.POST("/albums", postAlbums)
+	router := gin.Default()
 
-    router.Run(":8080")
+	router.GET("/products/:productId", getProduct)
+	router.POST("/products/:productId/details", addProductDetails)
+
+	router.Run(":8080")
 }
 
-// getAlbums responds with the list of all albums as JSON.
-func getAlbums(c *gin.Context) {
-    c.IndentedJSON(http.StatusOK, albums)
+// GET /products/{productId} - Retrieve a product by ID
+func getProduct(c *gin.Context) {
+	// Parse and validate productId from path
+	productId, err := strconv.Atoi(c.Param("productId"))
+	if err != nil || productId < 1 {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "INVALID_INPUT",
+			Message: "Invalid product ID",
+			Details: "Product ID must be a positive integer",
+		})
+		return
+	}
+
+	// Look up product in memory
+	mu.RLock()
+	product, exists := products[productId]
+	mu.RUnlock()
+
+	if !exists {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Error:   "NOT_FOUND",
+			Message: "Product not found",
+			Details: "No product found with ID " + strconv.Itoa(productId),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, product)
 }
 
-// postAlbums adds an album from JSON received in the request body.
-func postAlbums(c *gin.Context) {
-    var newAlbum album
+// POST /products/{productId}/details - Add or update product details
+func addProductDetails(c *gin.Context) {
+	// Parse and validate productId from path
+	productId, err := strconv.Atoi(c.Param("productId"))
+	if err != nil || productId < 1 {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "INVALID_INPUT",
+			Message: "Invalid product ID",
+			Details: "Product ID must be a positive integer",
+		})
+		return
+	}
 
-    // Call BindJSON to bind the received JSON to
-    // newAlbum.
-    if err := c.BindJSON(&newAlbum); err != nil {
-        return
-    }
+	// Bind and validate request body
+	var product Product
+	if err := c.ShouldBindJSON(&product); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "INVALID_INPUT",
+			Message: "Invalid input data",
+			Details: err.Error(),
+		})
+		return
+	}
 
-    // Add the new album to the slice.
-    albums = append(albums, newAlbum)
-    c.IndentedJSON(http.StatusCreated, newAlbum)
-}
+	// Store the product
+	mu.Lock()
+	products[productId] = product
+	mu.Unlock()
 
-// getAlbumByID locates the album whose ID value matches the id
-// parameter sent by the client, then returns that album as a response.
-func getAlbumByID(c *gin.Context) {
-    id := c.Param("id")
-
-    // Loop through the list of albums, looking for
-    // an album whose ID value matches the parameter.
-    for _, a := range albums {
-        if a.ID == id {
-            c.IndentedJSON(http.StatusOK, a)
-            return
-        }
-    }
-    c.IndentedJSON(http.StatusNotFound, gin.H{"message": "album not found"})
+	c.Status(http.StatusNoContent) // 204
 }
