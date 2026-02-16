@@ -61,7 +61,7 @@ Implements the **Product** portion of the OpenAPI spec (`api.yaml`):
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/0b00101111/CS6650_2b_demo.git
+   git clone https://github.com/Sam-Shuang-Wu/CS6650_2b_demo.git
    cd CS6650_2b_demo
    ```
 
