@@ -1,5 +1,4 @@
-# Wire together four focused modules: network, ecr, logging, ecs.
-
+# Wire together modules: network, ecr, logging, alb, ecs, autoscaling
 module "network" {
   source         = "./modules/network"
   service_name   = var.service_name
@@ -22,6 +21,16 @@ data "aws_iam_role" "lab_role" {
   name = "LabRole"
 }
 
+# Application Load Balancer
+module "alb" {
+  source                 = "./modules/alb"
+  service_name           = var.service_name
+  container_port         = var.container_port
+  vpc_id                 = module.network.vpc_id
+  subnet_ids             = module.network.subnet_ids
+  alb_security_group_ids = [module.network.alb_security_group_id]
+}
+
 module "ecs" {
   source             = "./modules/ecs"
   service_name       = var.service_name
@@ -34,22 +43,27 @@ module "ecs" {
   log_group_name     = module.logging.log_group_name
   ecs_count          = var.ecs_count
   region             = var.aws_region
+  target_group_arn   = module.alb.target_group_arn
 }
 
+# Auto Scaling
+module "autoscaling" {
+  source       = "./modules/autoscaling"
+  cluster_name = module.ecs.cluster_name
+  service_name = module.ecs.service_name
+  min_capacity = 2
+  max_capacity = 4
+  cpu_target   = 70
+}
 
 // Build & push the Go app image into ECR
 resource "docker_image" "app" {
-  # Use the URL from the ecr module, and tag it "latest"
   name = "${module.ecr.repository_url}:latest"
-
   build {
-    # relative path from terraform/ → src/
     context = "../src"
-    # Dockerfile defaults to "Dockerfile" in that context
   }
 }
 
 resource "docker_registry_image" "app" {
-  # this will push :latest → ECR
   name = docker_image.app.name
 }

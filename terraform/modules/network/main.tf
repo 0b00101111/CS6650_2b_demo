@@ -11,7 +11,7 @@ data "aws_subnets" "default" {
   }
 }
 
-# Create a security group to allow HTTP to your container port
+# Security group for ECS tasks (allows traffic from ALB on container port)
 resource "aws_security_group" "this" {
   name        = "${var.service_name}-sg"
   description = "Allow inbound on ${var.container_port}"
@@ -23,6 +23,29 @@ resource "aws_security_group" "this" {
     protocol    = "tcp"
     cidr_blocks = var.cidr_blocks
     description = "Allow HTTP traffic"
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow all outbound"
+  }
+}
+
+# Security group for ALB (allows port 80 from internet)
+resource "aws_security_group" "alb" {
+  name        = "${var.service_name}-alb-sg"
+  description = "Allow inbound on port 80 for ALB"
+  vpc_id      = data.aws_vpc.default.id
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow HTTP traffic to ALB"
   }
 
   egress {

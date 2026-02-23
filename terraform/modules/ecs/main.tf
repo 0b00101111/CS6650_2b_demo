@@ -10,19 +10,16 @@ resource "aws_ecs_task_definition" "this" {
   requires_compatibilities = ["FARGATE"]
   cpu                      = var.cpu
   memory                   = var.memory
-
-  execution_role_arn = var.execution_role_arn
-  task_role_arn      = var.task_role_arn
+  execution_role_arn       = var.execution_role_arn
+  task_role_arn            = var.task_role_arn
 
   container_definitions = jsonencode([{
     name      = "${var.service_name}-container"
     image     = var.image
     essential = true
-
     portMappings = [{
       containerPort = var.container_port
     }]
-
     logConfiguration = {
       logDriver = "awslogs"
       options = {
@@ -34,7 +31,7 @@ resource "aws_ecs_task_definition" "this" {
   }])
 }
 
-# ECS Service
+# ECS Service - now with ALB integration
 resource "aws_ecs_service" "this" {
   name            = var.service_name
   cluster         = aws_ecs_cluster.this.id
@@ -43,8 +40,18 @@ resource "aws_ecs_service" "this" {
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets         = var.subnet_ids
-    security_groups = var.security_group_ids
+    subnets          = var.subnet_ids
+    security_groups  = var.security_group_ids
     assign_public_ip = true
+  }
+
+  # Connect to ALB target group
+  dynamic "load_balancer" {
+    for_each = var.target_group_arn != "" ? [1] : []
+    content {
+      target_group_arn = var.target_group_arn
+      container_name   = "${var.service_name}-container"
+      container_port   = var.container_port
+    }
   }
 }

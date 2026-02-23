@@ -40,7 +40,7 @@ variable "log_group_name" {
 
 variable "ecs_count" {
   type        = number
-  default     = 1
+  default     = 2
   description = "Desired Fargate task count"
 }
 
@@ -59,4 +59,10 @@ variable "memory" {
   type        = string
   default     = "512"
   description = "Memory (MiB)"
+}
+
+variable "target_group_arn" {
+  type        = string
+  default     = ""
+  description = "ALB target group ARN (empty = no ALB)"
 }

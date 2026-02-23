@@ -1,4 +1,11 @@
 **.tfvars
 **.tfstate
 **.tfstate.*
-**/.terraform/
+**/.terraform/tags
+.DS_Store
+__pycache__/
+.idea/
+terraform/terraform-part3.tar.gz
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/*.tfstate*
